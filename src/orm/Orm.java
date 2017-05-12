@@ -1,8 +1,12 @@
 package orm;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import model.EmployeeModel;
 import model.Model;
 
 abstract class Orm {
@@ -16,11 +20,38 @@ abstract class Orm {
     protected ArrayList<Object> clauseValues = new ArrayList<Object>(); // プリペアードステートメントで登録する値
 
     /***
+     * TODO
+     *   sql実行メソッド
+     *   カラム内に存在するか確認メソッド
+     *   リフレクション実行用メソッド
+     */
+
+    /***
      * レコードの取得
      *
      * @return
      */
     public ArrayList<Model> select() {
+        ArrayList<Model> models = new ArrayList<Model>();
+        String sql = "SELECT * FROM employee";
+
+        try {
+            PreparedStatement stmt = Dbh.get().prepareStatement(sql);
+            //stmt.setString(i + 1, sqlWhereValues.get(i));
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                models.add(new EmployeeModel(
+                        rs.getInt("id_employee"),
+                        rs.getString("nm_employee"),
+                        rs.getString("kn_employee"),
+                        rs.getString("mail_address"),
+                        rs.getString("password"),
+                        rs.getInt("id_department"),
+                        rs.getInt("age")));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
@@ -30,7 +61,6 @@ abstract class Orm {
      * @return
      */
     public Model find() {
-
         return null;
     }
 
@@ -41,6 +71,8 @@ abstract class Orm {
      * @return
      */
     public Model find(int id) {
+        System.out.println(this.getClass());
+        System.out.println("find(id)");
         return null;
     }
 

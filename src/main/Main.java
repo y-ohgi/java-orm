@@ -5,18 +5,49 @@ import java.util.Arrays;
 public class Main {
 
     public static void main(String[] args) {
-        String res = "";
-        String str = "id_depertment";
-        String[] strs = str.split("_");
 
-        //String[] ary = (String[]) Arrays.stream(strs).map(s -> s.substring(0, 1).toUpperCase() + s.substring(1)).toArray();
 
-        for(String s : strs){
-            res += s.substring(0, 1).toUpperCase() + s.substring(1);
+
+        /*
+        Map<String, String[]> TABLE_RELATED = new HashMap<String, String[]>() {
+            {
+                String[] rel = {"depertment", "DepertmentModel"};
+                put("id_depertment", rel);
+            }
+        };
+
+        s(TABLE_RELATED.get("id_depertment")[1]);
+
+        /*
+        //s(String.class.getName());
+        Object typeS = String.class;
+        Class<?> typeI = int.class;
+
+
+        try {
+            Class type = Class.forName("int");
+            Class<?> clazz = Class.forName("orm.EmployeeOrm");
+            Method method = clazz.getDeclaredMethod("find", type);
+
+            s( method.invoke(clazz.newInstance(), 1) );
+
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
         }
 
-        s(res);
-
+        /**/
     }
 
 
@@ -36,3 +67,5 @@ public class Main {
     }
 
 }
+
+
