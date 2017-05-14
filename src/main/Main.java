@@ -1,6 +1,8 @@
 package main;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.sun.org.apache.bcel.internal.generic.NEW;
 
@@ -12,16 +14,11 @@ import orm.UserCharactersOrm;
 public class Main {
 
     public static void main(String[] args) {
-//        UserCharacterModel employee = (UserCharacterModel) new UserCharactersOrm().find();
-//        s( employee );
-
-        //new UserCharactersOrm().leftJoin("user_id", "Users", 1).select();
-        // new UserCharactersOrm().leftJoin(column, table, id)
-
-        UserCharacterModel chara = (UserCharacterModel) new UserCharactersOrm().find();
+        UserCharacterModel chara = (UserCharacterModel)new UserCharactersOrm()
+                .where("name", "=", "a_さぶ")
+                .find();
         s(chara.getId());
         s(chara.getName());
-        s(chara.getAge());
     }
 
 
@@ -32,12 +29,6 @@ public class Main {
     public static void s(Object o){
         System.out.println(o);
     }
-
-    // public static void name(ArrayList<Integer> values) {
-    public static void ary(int[] values) {
-        System.out.println(Arrays.toString(values));
-    }
-
 }
 
 

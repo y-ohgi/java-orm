@@ -10,7 +10,11 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import com.sun.crypto.provider.RSACipher;
 import com.sun.javafx.sg.prism.NGShape.Mode;
+import com.sun.media.sound.ModelSource;
+import com.sun.org.apache.xpath.internal.operations.Mod;
+import com.sun.xml.internal.bind.v2.runtime.unmarshaller.XsiNilLoader.Array;
 
 import jdk.nashorn.internal.objects.annotations.Where;
 import model.EmployeeModel;
@@ -20,20 +24,23 @@ import sun.reflect.Reflection;
 public abstract class Orm {
     protected static String TABLE_NAME; // テーブル名
     protected static String TABLE_PK_NAME = "id"; // PRIMARY KEYのカラム名
-    protected static Map<String, Class<?>>  TABLE_COLUMNS; // テーブルのカラムを登録
+    protected static Map<String, Class<?>> TABLE_COLUMNS; // テーブルのカラムを登録
     protected static Map<String, String[]> TABLE_RELATED; // 外部キー情報を登録
 
     protected String sql = ""; // 実行するSQL
-    protected ArrayList<String> clauses = new ArrayList<String>(); // 使用する句の登録
+    // protected ArrayList<String> clauses = new ArrayList<String>(); //
+    // 使用する句の登録
+    protected String clause = " WHERE "; // 使用する句の登録
     protected ArrayList<Object> clauseValues = new ArrayList<Object>(); // プリペアードステートメントで登録する値
+    protected int limi = -1; // レコードの取得件数
 
-    Orm(String tableName, String tablePkName, Map<String, Class<?>> tableColumns, Map<String, String[]> tableRelated){
+    Orm(String tableName, String tablePkName, Map<String, Class<?>> tableColumns, Map<String, String[]> tableRelated) {
         TABLE_NAME = tableName;
         TABLE_PK_NAME = tablePkName;
         TABLE_COLUMNS = tableColumns;
         TABLE_RELATED = tableRelated;
     }
-    
+
     /***
      * TODO sql実行メソッド カラム内に存在するか確認メソッド リフレクション実行用メソッド
      */
@@ -44,39 +51,10 @@ public abstract class Orm {
      * @return
      */
     public ArrayList<Model> select() {
-        ArrayList<Model> models = new ArrayList<Model>();
-        String sql = "SELECT * FROM employee";
+        sql = "SELECT * FROM " + TABLE_NAME + " ";
 
-        try {
-            PreparedStatement stmt = Dbh.get().prepareStatement(sql);
-            // stmt.setString(i + 1, sqlWhereValues.get(i));
-            ResultSet rs = stmt.executeQuery();
+        ArrayList<Model> models = fetchModels();
 
-            String modelName = genModelClassNameFromTableName();
-            Class<?> clazz = Class.forName(modelName);
-            
-            while (rs.next()) {
-                Object model = clazz.newInstance();
-                Method method = clazz.getDeclaredMethod("setId", int.class);
-
-                method.invoke(model, 1);
-                
-                
-                models.add((Model) model);
-
-                // models.add(new EmployeeModel(
-                // rs.getInt("id_employee"),
-                // rs.getString("nm_employee"),
-                // rs.getString("kn_employee"),
-                // rs.getString("mail_address"),
-                // rs.getString("password"),
-                // rs.getInt("id_department"),
-                // rs.getInt("age")));
-            }
-        } catch (SQLException | ClassNotFoundException | InstantiationException | IllegalAccessException
-                | NoSuchMethodException | SecurityException | IllegalArgumentException | InvocationTargetException e) {
-            e.printStackTrace();
-        }
         return models;
     }
 
@@ -86,69 +64,22 @@ public abstract class Orm {
      * @return
      */
     public Model find() {
-        //System.out.println(TABLE_NAME);
-        
+        // TODO: limit 1 を差し込む
 
-        /**/
-        Model model = null;
-        //TODO: カラムを*じゃなくまともな感じにする。
-        //        可能であれば登場順に a, b, cとかでASしてやる
-        //        ex. SELECT `a`.`id` AS `a_id`, ... FROM `UserCharacters` AS `a`
-        sql = "SELECT * FROM "+TABLE_NAME+" WHERE id = 2";
-        
-        try {
-            PreparedStatement stmt = Dbh.get().prepareStatement(sql);
-            
-            ResultSet rs = stmt.executeQuery();
+        // TODO: カラムを*じゃなくまともな感じにする。
+        // 可能であれば登場順に a, b, cとかでASしてやる
+        // ex. SELECT `a`.`id` AS `a_id`, ... FROM `UserCharacters` AS `a`
+        // SQL生成
+        // 取得するカラムの決定
+        // 句とかの結合
+        // COUNT関数だったらおとなしく実行
+        // JOINとか考えねば
+        // LIKEでいいのでは
+        sql = "SELECT * FROM " + TABLE_NAME + " ";
 
-            //TODO: ここらへんから取得したレコードをモデルに格納する処理。メソッド分ける
-            String modelName = genModelClassNameFromTableName();
-            Class<?> clazz = Class.forName(modelName);
-            while (rs.next()) {
-                Object mo = clazz.newInstance();
-                
-                for(Map.Entry<String, Class<?>> e : TABLE_COLUMNS.entrySet()) {
-                    //System.out.println(e.getKey() + " : " + e.getValue());
-                    //System.out.println(convSnakeCaseToUpperCase(e.getKey()));
-                    Method method = null;
-                    
-                    switch (e.getValue().toString()) {
-                    case "class java.lang.String":
-                        method = clazz.getDeclaredMethod("set"+convSnakeCaseToUpperCase(e.getKey()), e.getValue());
-                        method.invoke(mo,rs.getString(e.getKey()));
-                        break;
-                    case "int":
-                        method = clazz.getDeclaredMethod("set"+convSnakeCaseToUpperCase(e.getKey()), e.getValue());
-                        method.invoke(mo,rs.getInt(e.getKey()));
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                
-                //TODO: ここでJOINされたテーブルの結合を行う
-                
-                
-                model = (Model)mo;
+        ArrayList<Model> models = fetchModels();
 
-                // models.add(new EmployeeModel(
-                // rs.getInt("id_employee"),
-                // rs.getString("nm_employee"),
-                // rs.getString("kn_employee"),
-                // rs.getString("mail_address"),
-                // rs.getString("password"),
-                // rs.getInt("id_department"),
-                // rs.getInt("age")));
-            }
-        } catch (SQLException | ClassNotFoundException | InstantiationException | IllegalAccessException
-                 | SecurityException | IllegalArgumentException | NoSuchMethodException | InvocationTargetException e) {
-            e.printStackTrace();
-        }
-        
-        
-        
-        /**/
-        return model;
+        return models.get(0);
 
     }
 
@@ -159,9 +90,11 @@ public abstract class Orm {
      * @return
      */
     public Model find(int id) {
-        System.out.println(this.getClass());
-        System.out.println("find(id)");
-        return null;
+        sql = "SELECT * FROM " + TABLE_NAME + " WHERE id = 1";
+
+        ArrayList<Model> models = fetchModels();
+
+        return models.get(0);
     }
 
     /***
@@ -230,24 +163,33 @@ public abstract class Orm {
      *            値
      * @return
      */
-    public Orm where(String column, String operator, int value) {
+    public Orm where(String column, String operator, Object value) {
+        // TODO: throwする
+        // TODO: intとString以外は弾く
+        if (isValidColumn(column) == false)
+            return this;
+        clause += column + " " + operator + " ? ";
+        clauseValues.add(value);
         return this;
     }
 
     /***
-     * 検索条件の追加
-     *
-     * @param column
-     *            テーブルのカラム名
-     * @param operator
-     *            演算子
-     * @param value
-     *            値
+     * OR条件の追加
+     * 
      * @return
      */
-    public Orm where(String column, String operator, String value) {
-        clauses.add(column);
-        clauseValues.add(value);
+    public Orm or() {
+        clause += " OR ";
+        return this;
+    }
+
+    /***
+     * AND条件の追加
+     * 
+     * @return
+     */
+    public Orm and() {
+        clause += " AND ";
         return this;
     }
 
@@ -419,12 +361,92 @@ public abstract class Orm {
         String tname = TABLE_NAME.substring(0, TABLE_NAME.length() - 1);
         return "model." + tname.substring(0, 1).toUpperCase() + tname.substring(1) + "Model";
     }
-    
+
     private String convSnakeCaseToUpperCase(String str) {
         String res = "";
-        for(String s : str.split("_")){
+        for (String s : str.split("_")) {
             res += s.substring(0, 1).toUpperCase() + s.substring(1);
         }
         return res;
+    }
+
+    private ArrayList<Model> fetchModels() {
+        ArrayList<Model> models = new ArrayList<Model>();
+
+        try {
+            if (clauseValues.size() > 0) {
+                sql += clause;
+            }
+            
+            // プリペアドステートメントの実行
+            PreparedStatement stmt = Dbh.get().prepareStatement(sql);
+
+            // 変数の格納
+            if (clauseValues.size() > 0) {
+                stmt = rpegisterClause(stmt);
+            }
+
+            // SQLの実行
+            ResultSet rs = stmt.executeQuery();
+
+            // TODO: ここらへんから取得したレコードをモデルに格納する処理。メソッド分ける
+            String modelName = genModelClassNameFromTableName();
+            Class<?> clazz = Class.forName(modelName);
+            while (rs.next()) {
+                Object model = clazz.newInstance();
+
+                for (Map.Entry<String, Class<?>> e : TABLE_COLUMNS.entrySet()) {
+                    Method method = null;
+
+                    switch (e.getValue().toString()) {
+                    case "class java.lang.String":
+                        method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                        method.invoke(model, rs.getString(e.getKey()));
+                        break;
+                    case "int":
+                        method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                        method.invoke(model, rs.getInt(e.getKey()));
+                        break;
+                    default:
+                        break;
+                    }
+                }
+
+                // TODO: ここでJOINされたテーブルの結合を行う
+
+                models.add((Model) model);
+            }
+        } catch (SQLException | ClassNotFoundException | InstantiationException | IllegalAccessException
+                | SecurityException | IllegalArgumentException | NoSuchMethodException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+
+        return models;
+    }
+
+    protected PreparedStatement rpegisterClause(PreparedStatement stmt) {
+        try {
+            for (int i = 0; i < clauseValues.size(); i++) {
+                switch (clauseValues.get(i).getClass().toString()) {
+                case "class java.lang.String":
+                    stmt.setString(i + 1, (String) clauseValues.get(i));
+                    break;
+                case "int":
+                    stmt.setInt(i + 1, (int) clauseValues.get(i));
+                    break;
+                default:
+                    System.out.println(clauseValues.get(i));
+                    break;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return stmt;
+
+    }
+
+    protected boolean isValidColumn(String column) {
+        return TABLE_COLUMNS.entrySet().stream().anyMatch(e -> e.getKey() == column);
     }
 }
