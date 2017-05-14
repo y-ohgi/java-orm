@@ -15,7 +15,7 @@ public class Dbh {
     public static Connection get() {
         if(con == null){
             try {
-                con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/jdbc", "root", "");
+                con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/narikiru", "root", "");
             } catch (SQLException e) {
                 e.printStackTrace();
             }
