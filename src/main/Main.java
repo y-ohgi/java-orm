@@ -15,8 +15,11 @@ public class Main {
 
     public static void main(String[] args) {
         UserCharacterModel chara = (UserCharacterModel)new UserCharactersOrm()
-                .where("id", "=", 7)
-                .find();
+//                .where("user_id", "=", 1)
+//                .and()
+//                .where("current_character_flg", "=", 0)
+//                .find();
+                .find(8);
         s(chara.getId());
         s(chara.getName());
     }

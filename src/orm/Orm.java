@@ -32,7 +32,8 @@ public abstract class Orm {
     // 使用する句の登録
     protected String clause = " WHERE "; // 使用する句の登録
     protected ArrayList<Object> clauseValues = new ArrayList<Object>(); // プリペアードステートメントで登録する値
-    protected int limi = -1; // レコードの取得件数
+    protected int limit = -1; // レコードの取得件数
+    protected int offset = -1; // レコード取得開始位置
 
     Orm(String tableName, String tablePkName, Map<String, Class<?>> tableColumns, Map<String, String[]> tableRelated) {
         TABLE_NAME = tableName;
@@ -80,7 +81,6 @@ public abstract class Orm {
         ArrayList<Model> models = fetchModels();
 
         return models.get(0);
-
     }
 
     /***
@@ -90,7 +90,14 @@ public abstract class Orm {
      * @return
      */
     public Model find(int id) {
-        sql = "SELECT * FROM " + TABLE_NAME + " WHERE id = 1";
+        if(clauseValues.size() > 0){
+            clause += "AND id = ? ";
+        }else{
+            clause += " id = ? ";
+        }
+        clauseValues.add(id);
+        
+        sql = "SELECT * FROM " + TABLE_NAME;
 
         ArrayList<Model> models = fetchModels();
 
@@ -225,19 +232,16 @@ public abstract class Orm {
      * @param values
      * @return
      */
-    public Orm in(String column, int[] values) {
-        return this;
-    }
-
-    /***
-     * valuesで渡した配列に1つでもマッチするレコードを取得
-     *
-     * @param column
-     *            テーブルのカラム名
-     * @param values
-     * @return
-     */
-    public Orm in(String column, String[] values) {
+    public Orm in(String column, Object[] values) {
+        // TODO:throw
+        if(isValidColumn(column) == false) return this;
+        clause += " " + column +  " IN (";
+        for (int i = 0; i < values.length; i++) {
+            if(i != 0) clause+=", ";
+            clause += "?";
+            clauseValues.add(values[i]);
+        }
+        clause += ") ";
         return this;
     }
 
@@ -272,7 +276,7 @@ public abstract class Orm {
         if(isValidColumn(column) == false) return this;
         clause += " BETWEEN ? AND ? ";
         clauseValues.add(start);
-        clauseValues.add(end)
+        clauseValues.add(end);
         return this;
     }
 
@@ -312,6 +316,7 @@ public abstract class Orm {
      * @return
      */
     public Orm limit(int limit) {
+        this.limit = limit;
         return this;
     }
 
@@ -322,6 +327,8 @@ public abstract class Orm {
      * @return
      */
     public Orm limit(int limit, int offset) {
+        this.limit = limit;
+        this.offset = offset;
         return this;
     }
 
@@ -332,6 +339,7 @@ public abstract class Orm {
      * @return
      */
     public Orm offset(int offset) {
+        this.offset = offset;
         return this;
     }
 
