@@ -200,6 +200,8 @@ public abstract class Orm {
      * @return
      */
     public Orm isNull(String column) {
+        if(isValidColumn(column) == false) return this;
+        clause += " IS NULL " + column + " ";
         return this;
     }
 
@@ -210,6 +212,8 @@ public abstract class Orm {
      * @return
      */
     public Orm isNotNull(String column) {
+        if(isValidColumn(column) == false) return this;
+        clause += " IS NOT NULL " + column + " ";
         return this;
     }
 
@@ -245,7 +249,11 @@ public abstract class Orm {
      * @param values
      * @return
      */
-    public Orm like(String column, String values) {
+    public Orm like(String column, String value) {
+        // TODO:throw
+        if(isValidColumn(column) == false) return this;
+        clause += column + " LIKE ? ";
+        clauseValues.add(value);
         return this;
     }
 
@@ -260,22 +268,11 @@ public abstract class Orm {
      *            終了値
      * @return
      */
-    public Orm between(String column, String start, String end) {
-        return this;
-    }
-
-    /***
-     * 指定した範囲内に含まれているレコードを全県取得
-     *
-     * @param column
-     *            テーブルのカラム名
-     * @param start
-     *            開始値
-     * @param end
-     *            終了値
-     * @return
-     */
-    public Orm between(String column, int start, int end) {
+    public Orm between(String column, Object start, Object end) {
+        if(isValidColumn(column) == false) return this;
+        clause += " BETWEEN ? AND ? ";
+        clauseValues.add(start);
+        clauseValues.add(end)
         return this;
     }
 
@@ -403,11 +400,10 @@ public abstract class Orm {
                         method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
                         method.invoke(model, rs.getString(e.getKey()));
                         break;
-                    case "int":
+                    default:
+                      //XXX: intの型名が取得できないため、defaultでキャッチ
                         method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
                         method.invoke(model, rs.getInt(e.getKey()));
-                        break;
-                    default:
                         break;
                     }
                 }
@@ -431,11 +427,9 @@ public abstract class Orm {
                 case "class java.lang.String":
                     stmt.setString(i + 1, (String) clauseValues.get(i));
                     break;
-                case "int":
-                    stmt.setInt(i + 1, (int) clauseValues.get(i));
-                    break;
                 default:
-                    System.out.println(clauseValues.get(i));
+                    //XXX: intの型名が取得できないため、defaultでキャッチ
+                    stmt.setInt(i + 1, (int) clauseValues.get(i));
                     break;
                 }
             }
