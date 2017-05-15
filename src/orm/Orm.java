@@ -1,6 +1,5 @@
 package orm;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.PreparedStatement;
@@ -8,18 +7,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Optional;
 
-import com.sun.crypto.provider.RSACipher;
-import com.sun.javafx.sg.prism.NGShape.Mode;
-import com.sun.media.sound.ModelSource;
-import com.sun.org.apache.xpath.internal.operations.Mod;
-import com.sun.xml.internal.bind.v2.runtime.unmarshaller.XsiNilLoader.Array;
-
-import jdk.nashorn.internal.objects.annotations.Where;
-import model.EmployeeModel;
 import model.Model;
-import sun.reflect.Reflection;
 
 public abstract class Orm {
     protected static String TABLE_NAME; // テーブル名
@@ -28,10 +18,13 @@ public abstract class Orm {
     protected static Map<String, String[]> TABLE_RELATED; // 外部キー情報を登録
 
     protected String sql = ""; // 実行するSQL
-    // protected ArrayList<String> clauses = new ArrayList<String>(); //
-    // 使用する句の登録
-    protected String clause = " WHERE "; // 使用する句の登録
+    protected String targetColumnsSql = ""; // 取得対象のカラム
+    protected ArrayList<String> targetColumns = new ArrayList<String>();
+    protected String clauseSql = " WHERE "; // 使用する句の登録
     protected ArrayList<Object> clauseValues = new ArrayList<Object>(); // プリペアードステートメントで登録する値
+    protected String joinSql = ""; // JOIN句の格納
+    protected String joinTable = ""; // JOIN対象のテーブル名
+
     protected int limit = -1; // レコードの取得件数
     protected int offset = -1; // レコード取得開始位置
 
@@ -40,6 +33,15 @@ public abstract class Orm {
         TABLE_PK_NAME = tablePkName;
         TABLE_COLUMNS = tableColumns;
         TABLE_RELATED = tableRelated;
+    }
+
+    /***
+     * TABLE_COLUMNSの取得
+     *
+     * @return
+     */
+    public static Map<String, Class<?>> getTableColumns(){
+        return TABLE_COLUMNS;
     }
 
     /***
@@ -52,7 +54,9 @@ public abstract class Orm {
      * @return
      */
     public ArrayList<Model> select() {
-        sql = "SELECT * FROM " + TABLE_NAME + " ";
+        //TODO: sql生成用メソッド作る
+        sql = "SELECT " +genTargetColumnsSqlFromCurrentTable()+ " FROM " + TABLE_NAME + " ";
+        if(joinSql != "") sql += joinSql;
 
         ArrayList<Model> models = fetchModels();
 
@@ -91,12 +95,12 @@ public abstract class Orm {
      */
     public Model find(int id) {
         if(clauseValues.size() > 0){
-            clause += "AND id = ? ";
+            clauseSql += "AND id = ? ";
         }else{
-            clause += " id = ? ";
+            clauseSql += " id = ? ";
         }
         clauseValues.add(id);
-        
+
         sql = "SELECT * FROM " + TABLE_NAME;
 
         ArrayList<Model> models = fetchModels();
@@ -175,28 +179,28 @@ public abstract class Orm {
         // TODO: intとString以外は弾く
         if (isValidColumn(column) == false)
             return this;
-        clause += column + " " + operator + " ? ";
+        clauseSql += column + " " + operator + " ? ";
         clauseValues.add(value);
         return this;
     }
 
     /***
      * OR条件の追加
-     * 
+     *
      * @return
      */
     public Orm or() {
-        clause += " OR ";
+        clauseSql += " OR ";
         return this;
     }
 
     /***
      * AND条件の追加
-     * 
+     *
      * @return
      */
     public Orm and() {
-        clause += " AND ";
+        clauseSql += " AND ";
         return this;
     }
 
@@ -208,7 +212,7 @@ public abstract class Orm {
      */
     public Orm isNull(String column) {
         if(isValidColumn(column) == false) return this;
-        clause += " IS NULL " + column + " ";
+        clauseSql += " IS NULL " + column + " ";
         return this;
     }
 
@@ -220,7 +224,7 @@ public abstract class Orm {
      */
     public Orm isNotNull(String column) {
         if(isValidColumn(column) == false) return this;
-        clause += " IS NOT NULL " + column + " ";
+        clauseSql += " IS NOT NULL " + column + " ";
         return this;
     }
 
@@ -235,13 +239,13 @@ public abstract class Orm {
     public Orm in(String column, Object[] values) {
         // TODO:throw
         if(isValidColumn(column) == false) return this;
-        clause += " " + column +  " IN (";
+        clauseSql += " " + column +  " IN (";
         for (int i = 0; i < values.length; i++) {
-            if(i != 0) clause+=", ";
-            clause += "?";
+            if(i != 0) clauseSql+=", ";
+            clauseSql += "?";
             clauseValues.add(values[i]);
         }
-        clause += ") ";
+        clauseSql += ") ";
         return this;
     }
 
@@ -256,7 +260,7 @@ public abstract class Orm {
     public Orm like(String column, String value) {
         // TODO:throw
         if(isValidColumn(column) == false) return this;
-        clause += column + " LIKE ? ";
+        clauseSql += column + " LIKE ? ";
         clauseValues.add(value);
         return this;
     }
@@ -274,7 +278,7 @@ public abstract class Orm {
      */
     public Orm between(String column, Object start, Object end) {
         if(isValidColumn(column) == false) return this;
-        clause += " BETWEEN ? AND ? ";
+        clauseSql += " BETWEEN ? AND ? ";
         clauseValues.add(start);
         clauseValues.add(end);
         return this;
@@ -345,25 +349,74 @@ public abstract class Orm {
 
     /**
      * LEFT JOIN を行う
-     * 
+     *
      * @param column
      * @param table
-     * @param id
      * @return
      */
-    public Orm leftJoin(String column, String table, int id) {
-        // XXX: どうやって親テーブルに張り付いている小テーブルと認識させるかが問題. lambda
-        // XXX: select()もしくはfind()で実行できるようにする必要
+    public Orm leftJoin(String column, String table) {
+        //TODO: throwする
+        if (isValidColumn(column) == false)
+            return this;
+        joinSql = " LEFT JOIN `"+table+"` ON `"+TABLE_NAME+"`.`"+column+"` = `"+table+"`.`id` ";
+        joinTable = table;
+
+        joinColumnBy(table);
+
         return this;
     }
 
-    /***
-     * テーブルネームからModelのクラス名を生成
-     * 
+    /**
+     * RIGHT JOIN を行う
+     *
+     * @param column
+     * @param table
      * @return
      */
-    private String genModelClassNameFromTableName() {
-        String tname = TABLE_NAME.substring(0, TABLE_NAME.length() - 1);
+    public Orm rightJoin(String column, String table) {
+        //TODO: throwする
+        //TODO: 別テーブルの isValidColum
+//        if (isValidColumn(column) == false)
+//            return this;
+        joinSql = " RIGHT JOIN `"+table+"` ON `"+TABLE_NAME+"`.`id` = `"+table+"`.`"+column+"` ";
+        joinTable = table;
+
+        joinColumnBy(table);
+
+        return this;
+    }
+
+
+    /***
+     * 指定したテーブルのカラムを取得可能にする
+     *
+     * @param table
+     */
+    private void joinColumnBy(String table){
+        System.out.println("---------------");
+        try {
+            Class<?> clazz = Class.forName("orm."+table+"Orm");
+            Map<String, Class<?>> columns = (Map<String, Class<?>>) clazz.getDeclaredField("TABLE_COLUMNS").get(clazz);
+
+            //TODO: firstflgはなおす or steram化
+            boolean firstflg = true;
+            for(Map.Entry<String, Class<?>> col : columns.entrySet()){
+                targetColumnsSql += " `"+table+"`.`"+col.getKey()+"` AS '"+table+"."+col.getKey()+"', ";
+            }
+
+        } catch (ClassNotFoundException  | SecurityException | IllegalAccessException | IllegalArgumentException  | NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    /***
+     * テーブルネームからModelのクラス名を生成
+     *
+     * @return
+     */
+    private String genModelClassNameFromTableName(String tableName) {
+        String tname = tableName.substring(0, tableName.length() - 1);
         return "model." + tname.substring(0, 1).toUpperCase() + tname.substring(1) + "Model";
     }
 
@@ -375,14 +428,19 @@ public abstract class Orm {
         return res;
     }
 
+    /***
+     * SQLの実行とModelの取得
+     *
+     * @return
+     */
     private ArrayList<Model> fetchModels() {
         ArrayList<Model> models = new ArrayList<Model>();
 
         try {
             if (clauseValues.size() > 0) {
-                sql += clause;
+                sql += clauseSql;
             }
-            
+
             // プリペアドステートメントの実行
             PreparedStatement stmt = Dbh.get().prepareStatement(sql);
 
@@ -394,40 +452,86 @@ public abstract class Orm {
             // SQLの実行
             ResultSet rs = stmt.executeQuery();
 
+            ArrayList<Integer> createdIds = new ArrayList<Integer>(); // 作成済みのレコードのidを格納
             // TODO: ここらへんから取得したレコードをモデルに格納する処理。メソッド分ける
-            String modelName = genModelClassNameFromTableName();
-            Class<?> clazz = Class.forName(modelName);
+            String modelName = genModelClassNameFromTableName(TABLE_NAME);
             while (rs.next()) {
-                Object model = clazz.newInstance();
+                Class<?> clazz = Class.forName(modelName);
+                Object model = null;
+                if(!createdIds.contains(rs.getInt(TABLE_NAME+".id"))){
+                    model = clazz.newInstance();
+                    for (Map.Entry<String, Class<?>> e : TABLE_COLUMNS.entrySet()) {
+                        Method method = null;
 
-                for (Map.Entry<String, Class<?>> e : TABLE_COLUMNS.entrySet()) {
-                    Method method = null;
-
-                    switch (e.getValue().toString()) {
-                    case "class java.lang.String":
-                        method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
-                        method.invoke(model, rs.getString(e.getKey()));
-                        break;
-                    default:
-                      //XXX: intの型名が取得できないため、defaultでキャッチ
-                        method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
-                        method.invoke(model, rs.getInt(e.getKey()));
-                        break;
+                        switch (e.getValue().toString()) {
+                        case "class java.lang.String":
+                            method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                            method.invoke(model, rs.getString(TABLE_NAME+"."+e.getKey()));
+                            break;
+                        default:
+                          //XXX: intの型名が取得できないため、defaultでキャッチ
+                            method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                            method.invoke(model, rs.getInt(TABLE_NAME+"."+e.getKey()));
+                            break;
+                        }
                     }
+                    models.add((Model) model);
                 }
 
-                // TODO: ここでJOINされたテーブルの結合を行う
+                if(joinTable != ""){
+                    model = models.stream().filter(m -> {
+                        try {
+                            return m.getId() == rs.getInt(TABLE_NAME+".id");
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                        return false;
+                    }).findFirst();
+                    model = ((Optional)model).orElse(null);
 
-                models.add((Model) model);
+                    // TODO: ここでJOINされたテーブルの結合を行う
+                    clazz = Class.forName("orm."+joinTable+"Orm");
+                    Map<String, Class<?>> columns = (Map<String, Class<?>>) clazz.getDeclaredField("TABLE_COLUMNS").get(clazz);
+
+
+                    // TABLE_NAMEとTABLE_COLUMNSをもとに rs.getXxx()を行う
+                    clazz = Class.forName(genModelClassNameFromTableName(joinTable));
+                    Object subModel = clazz.newInstance();
+                    for (Map.Entry<String, Class<?>> e : columns.entrySet()) {
+                        Method method = null;
+
+                        switch (e.getValue().toString()) {
+                        case "class java.lang.String":
+                            method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                            method.invoke(subModel, rs.getString(joinTable+"."+e.getKey()));
+                            break;
+                        default:
+                          //XXX: intの型名が取得できないため、defaultでキャッチ
+                            method = clazz.getDeclaredMethod("set" + convSnakeCaseToUpperCase(e.getKey()), e.getValue());
+                            method.invoke(subModel, rs.getInt(joinTable+"."+e.getKey()));
+                            break;
+                        }
+                    }
+
+                    // modelへ格納
+                    ((Model) model).setModel(subModel);
+                }
+
             }
         } catch (SQLException | ClassNotFoundException | InstantiationException | IllegalAccessException
-                | SecurityException | IllegalArgumentException | NoSuchMethodException | InvocationTargetException e) {
+                | SecurityException | IllegalArgumentException | NoSuchMethodException | InvocationTargetException | NoSuchFieldException e) {
             e.printStackTrace();
         }
 
         return models;
     }
 
+    /***
+     * SQLの?へ値の登録
+     *
+     * @param stmt
+     * @return
+     */
     protected PreparedStatement rpegisterClause(PreparedStatement stmt) {
         try {
             for (int i = 0; i < clauseValues.size(); i++) {
@@ -446,6 +550,33 @@ public abstract class Orm {
         }
         return stmt;
 
+    }
+
+    /**
+     * TABLE_COLUMNSとtargetColumnsを元に 取得するカラムを指定するための文字列を生成する
+     *
+     * @return
+     */
+    protected String genTargetColumnsSqlFromCurrentTable(){
+        String columnsSql = " " + targetColumnsSql + " ";
+        try {
+            //TODO: firstflgはなおす
+            boolean firstflg = true;
+            for(Map.Entry<String, Class<?>> col : TABLE_COLUMNS.entrySet()){
+                if(firstflg){
+                    firstflg = false;
+                }else{
+                    columnsSql += " , ";
+                }
+                columnsSql += " `"+TABLE_NAME+"`.`"+col.getKey()+"` AS '"+TABLE_NAME+"."+col.getKey()+"' ";
+            }
+
+        } catch (SecurityException | IllegalArgumentException e) {
+            // TODO 自動生成された catch ブロック
+            e.printStackTrace();
+        }
+
+        return columnsSql;
     }
 
     protected boolean isValidColumn(String column) {

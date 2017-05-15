@@ -1,31 +1,34 @@
 package model;
 
-import java.util.ArrayList;
-
-public class UserCharacterModel extends Model {
+public class CharacterFollowModel extends Model {
     private int id;
-    private int userId;
+    private int user_id;
+    private int tag_id;
     private String name;
     private String kana;
     private String age;
-    private String gender;
     private String height;
+    private String gender;
     private String description;
     private String iconPath;
     private int currentCharacterFlg;
-    private int tagId;
-
     public int getId() {
         return id;
     }
     public void setId(int id) {
         this.id = id;
     }
-    public int getUserId() {
-        return userId;
+    public int getUser_id() {
+        return user_id;
     }
-    public void setUserId(int userId) {
-        this.userId = userId;
+    public void setUser_id(int user_id) {
+        this.user_id = user_id;
+    }
+    public int getTag_id() {
+        return tag_id;
+    }
+    public void setTag_id(int tag_id) {
+        this.tag_id = tag_id;
     }
     public String getName() {
         return name;
@@ -45,17 +48,17 @@ public class UserCharacterModel extends Model {
     public void setAge(String age) {
         this.age = age;
     }
-    public String getGender() {
-        return gender;
-    }
-    public void setGender(String gender) {
-        this.gender = gender;
-    }
     public String getHeight() {
         return height;
     }
     public void setHeight(String height) {
         this.height = height;
+    }
+    public String getGender() {
+        return gender;
+    }
+    public void setGender(String gender) {
+        this.gender = gender;
     }
     public String getDescription() {
         return description;
@@ -75,22 +78,6 @@ public class UserCharacterModel extends Model {
     public void setCurrentCharacterFlg(int currentCharacterFlg) {
         this.currentCharacterFlg = currentCharacterFlg;
     }
-    public int getTagId() {
-        return tagId;
-    }
-    public void setTagId(int tagId) {
-        this.tagId = tagId;
-    }
 
-    /***
-     * タグネームの取得
-     *
-     * @return
-     */
-    public String getTagName(){
-        String name = "";
-        ArrayList<TagModel> tags = (ArrayList<TagModel>) models.stream().filter(m -> m.getClass().getSimpleName() == "TagModel");
-        return tags.get(0) != null?tags.get(0).getName():"";
-    }
 
 }
